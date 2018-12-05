@@ -1,0 +1,78 @@
+import com.alibaba.fastjson.JSON
+import com.alibaba.fastjson.JSONObject
+import com.alibaba.fastjson.serializer.SerializerFeature
+import com.caibeike.common.utils.DBHelper
+import script.ApplyClubBillEntity
+import script.ApplyClubBillEntityOld
+import script.ApplyClubProject
+import script.RangeDateTime
+
+
+def sqCrm = DBHelper.createProSql("crm", "127.0.0.1", 3307, "crm", "T2HLbTBW2RCd");
+//def aa= sqCrm.firstRow("SELECT * FROM crm.apply_bill where gmtModified < '2018-09-10' and gmtModified >= '2018-09-01'" +
+//        " and bizType != 'lottery' and bizType = 'groupon' limit 1");
+int count = 0;
+sqCrm.eachRow("select * from crm.apply_club_project "){ clubProject->
+
+    println(clubProject);
+    println("jj-->"+clubProject.bizData);
+    ApplyClubBillEntityOld.Project oldProject = JSONObject.parseObject(clubProject.bizData,ApplyClubBillEntityOld.Project.class);
+    println(JSON.toJSONString(oldProject));
+    ApplyClubBillEntity.Project newPorject = JSONObject.parseObject(clubProject.bizData,ApplyClubBillEntity.Project.class);
+
+
+
+    if (oldProject.inventoryList != null && oldProject.inventoryList.size() > 0) {
+        for (int i = 0 ; i < oldProject.inventoryList.size(); i++) {
+            List<ApplyClubBillEntity.InventoryTemplate<String>> newdayInventoryList =  newPorject.inventoryList[i].dayInventory;
+
+            List<ApplyClubBillEntityOld.InventoryTemplate<String>> dayInventoryList =  oldProject.inventoryList[i].dayInventory;
+            if (dayInventoryList != null && dayInventoryList.size() > 0) {
+                println("day id :"+clubProject.id);
+                for (dayInvIdx = 0 ; dayInvIdx < dayInventoryList.size(); dayInvIdx ++ ) {
+                    List<ApplyClubBillEntity.ReceptionDay> newdayReceptions = newdayInventoryList[dayInvIdx].receptionSession;
+
+                    List<ApplyClubBillEntityOld.ReceptionDay> dayReceptions = dayInventoryList[dayInvIdx].receptionSession;
+                    method(newdayReceptions, dayReceptions);
+                }
+            }
+
+            List<ApplyClubBillEntity.InventoryTemplate<Integer>> newweekInventory = newPorject.inventoryList[i].weekInventory;
+            List<ApplyClubBillEntityOld.InventoryTemplate<Integer>> weekInventory = oldProject.inventoryList[i].weekInventory;
+            if (weekInventory != null && weekInventory.size() > 0) {
+                println("week id:"+clubProject.id);
+                for (int j = 0; j < weekInventory.size(); j++) {
+                    List<ApplyClubBillEntity.ReceptionDay> newdayReceptions = newweekInventory[j].receptionSession;
+                    List<ApplyClubBillEntityOld.ReceptionDay> olddayReceptions = weekInventory[j].receptionSession;
+                    method(newdayReceptions,olddayReceptions);
+                }
+            }
+        }
+    }
+
+    String newBizData = JSON.toJSONString(newPorject, SerializerFeature.WriteMapNullValue,SerializerFeature.NotWriteDefaultValue, SerializerFeature.WriteNullStringAsEmpty)
+//    clubProject.bizData = newBizData;
+    println("新结构了:"+newBizData);
+    sqCrm.execute("update crm.apply_club_project set bizData = ${newBizData} where id = ${clubProject.id}")
+    count ++;
+    println("数字："+count);
+}
+
+
+def method(List<ApplyClubBillEntity.ReceptionDay> newdayReceptions, List<ApplyClubBillEntityOld.ReceptionDay> dayReceptions) {
+
+    if (dayReceptions != null && dayReceptions.size() > 0) {
+        for (int idxRecp = 0 ; idxRecp < dayReceptions.size() ; idxRecp++) {
+
+            ApplyClubBillEntityOld.ReceptionDay receptionDay = dayReceptions[idxRecp];
+            ApplyClubBillEntity.ReceptionDay newReceptionDay = newdayReceptions[idxRecp];
+
+            List<RangeDateTime<String>> times = receptionDay.fieldTimes;
+            if (times != null && times.size() > 0) {
+                RangeDateTime<String> range = new RangeDateTime(times[0].start, times[0].end);
+                newReceptionDay.setInventory(0);
+                newReceptionDay.setRange(range);
+            }
+        }
+    }
+}

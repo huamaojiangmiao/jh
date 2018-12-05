@@ -1,0 +1,84 @@
+import com.alibaba.fastjson.JSON
+import com.alibaba.fastjson.JSONObject
+import com.alibaba.fastjson.serializer.SerializerFeature
+import com.caibeike.common.utils.DBHelper
+import com.google.common.collect.Lists
+import script.ApplyClubBillEntity
+import script.ApplyClubBillEntityOld
+import script.ApplyGrouponBillEntity
+import script.ApplyGrouponBillEntityOld
+import script.RangeDateTime
+import script.Session
+
+
+def sqCrm = DBHelper.createProSql("crm", "127.0.0.1", 3308, "crm", "T2HLbTBW2RCd");
+//def aa= sqCrm.firstRow("SELECT * FROM crm.apply_bill where gmtModified < '2018-09-10' and gmtModified >= '2018-09-01'" +
+//        " and bizType != 'lottery' and bizType = 'groupon' limit 1");
+int count = 0;
+sqCrm.eachRow("SELECT * FROM crm.apply_bill where bizType = 'groupon'"){ applyBill->
+
+    String string = "sessions\":[{\"range";
+    println(applyBill);
+    println("jj-->"+applyBill.bizData);
+    if (applyBill.bizData.contains(string)) {
+        return;
+    }
+    ApplyGrouponBillEntityOld oldGroupon = JSONObject.parseObject(applyBill.bizData,ApplyGrouponBillEntityOld.class);
+    println(JSON.toJSONString(oldGroupon));
+
+    ApplyGrouponBillEntity newGroupon = JSONObject.parseObject(applyBill.bizData,ApplyGrouponBillEntity.class);
+
+
+    boolean find = false;
+    if (oldGroupon != null && oldGroupon.receptionInfo != null) {
+        List<ApplyGrouponBillEntityOld.Reception.ReceptionDay> oldReceptionDays = oldGroupon.receptionInfo.receptionDayInfo;
+        List<ApplyGrouponBillEntity.Reception.ReceptionDay> newReceptionDays = newGroupon.receptionInfo.receptionDayInfo;
+        if (oldReceptionDays != null && newReceptionDays != null && oldReceptionDays.size() > 0 && newReceptionDays.size() > 0) {
+            for (int i = 0 ; i < oldReceptionDays.size(); i++) {
+                ApplyGrouponBillEntityOld.Reception.ReceptionDay oldDay = oldReceptionDays[i];
+                ApplyGrouponBillEntity.Reception.ReceptionDay newDay = newReceptionDays[i];
+                if (oldDay.fieldTimes != null && oldDay.fieldTimes.size() > 0) {
+                    List<Session> sessions = Lists.newArrayList();
+                    for (int j = 0 ; j < oldDay.fieldTimes.size(); j++) {
+                        find = true;
+                        RangeDateTime<String> oneTime = oldDay.fieldTimes[j];
+                        Session session = new Session();
+                        session.setInventory(0);
+                        session.setRange(oneTime);
+                        sessions.add(session);
+                    }
+                    newDay.setSessions(sessions);
+                }
+            }
+        }
+    }
+
+    if (find) {
+        String newBizData = JSON.toJSONString(newGroupon, SerializerFeature.WriteMapNullValue,SerializerFeature.NotWriteDefaultValue,
+                SerializerFeature.WriteNullStringAsEmpty)
+        println("newBizData--->"+newBizData);
+        sqCrm.execute("update crm.apply_bill set bizData = ${newBizData} where applyNo = ${applyBill.applyNo}")
+    }
+
+    count ++;
+    println("数字："+count);
+}
+
+
+def method(List<ApplyClubBillEntity.ReceptionDay> newdayReceptions, List<ApplyClubBillEntityOld.ReceptionDay> dayReceptions) {
+
+    if (dayReceptions != null && dayReceptions.size() > 0) {
+        for (int idxRecp = 0 ; idxRecp < dayReceptions.size() ; idxRecp++) {
+
+            ApplyClubBillEntityOld.ReceptionDay receptionDay = dayReceptions[idxRecp];
+            ApplyClubBillEntity.ReceptionDay newReceptionDay = newdayReceptions[idxRecp];
+
+            List<RangeDateTime<String>> times = receptionDay.fieldTimes;
+            if (times != null && times.size() > 0) {
+                RangeDateTime<String> range = new RangeDateTime(times[0].start, times[0].end);
+                newReceptionDay.setInventory(0);
+                newReceptionDay.setRange(range);
+            }
+        }
+    }
+}
