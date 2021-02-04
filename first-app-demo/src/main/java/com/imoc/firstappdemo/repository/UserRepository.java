@@ -3,6 +3,7 @@ package com.imoc.firstappdemo.repository;
 import com.imoc.firstappdemo.domain.User;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -26,5 +27,9 @@ public class UserRepository {
         Integer id = idGenerator.incrementAndGet();
         user.setId(id);
         return repository.put(id, user) == null;
+    }
+
+    public Collection<User> findAll() {
+        return repository.values();
     }
 }

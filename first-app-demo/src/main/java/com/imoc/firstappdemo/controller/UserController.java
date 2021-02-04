@@ -1,11 +1,16 @@
 package com.imoc.firstappdemo.controller;
 
+import com.imoc.firstappdemo.demo.guava.caffeine.UserInfo;
+import com.imoc.firstappdemo.demo.guava.caffeine.UserInfoService;
+import com.imoc.firstappdemo.demo.semaphore.FrequencyController;
 import com.imoc.firstappdemo.domain.User;
 import com.imoc.firstappdemo.repository.UserRepository;
+import com.imoc.firstappdemo.util.ThreadPools;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
 
 /**
  * @author jianghua
@@ -15,6 +20,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserRepository userRepository;
+
+    private static FrequencyController controller;
+
+    @Autowired
+    private UserInfoService userInfoService;
+
+
+    static {
+        controller = new FrequencyController(2);
+        ThreadPools.getInstance().submitsemaphoreTask(controller);
+    }
 
     @Autowired
     public UserController(UserRepository userRepository) {
@@ -30,4 +46,28 @@ public class UserController {
         }
         return user;
     }
+
+
+    @PostMapping("/kafka/semaphore")
+    public String semaphore(@RequestParam String name) {
+        try {
+            long start = System.currentTimeMillis();
+            controller.getSemaphore().acquireUninterruptibly(1);
+            System.out.println("semaphore请求." + name+"; 间隔："+ (System.currentTimeMillis() - start));
+            return "OK";
+        } catch (Exception e) {
+            System.out.printf("异常");
+        }
+
+        return "ERROR";
+    }
+
+    @PostMapping("/caffeine/query")
+    public UserInfo caffeineCacheTest(@RequestParam String guid) {
+
+        UserInfo userInfo = userInfoService.getByUserId(guid);
+        return userInfo;
+    }
+
+
 }
